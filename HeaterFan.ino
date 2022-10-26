@@ -5,7 +5,8 @@
 #include "Button2.h"
 #include "esp_adc_cal.h"
 #include "bmp.h"
-
+#include <OneWire.h>
+#include <DallasTemperature.h>
 
 // TFT Pins has been set in the TFT_eSPI library in the User Setup file TTGO_T_Display.h
 // #define TFT_MOSI            19
@@ -21,8 +22,12 @@
 #define BUTTON_1            35
 #define BUTTON_2            0
 
-// DS18B20 op pin 2.
-OneWire ds(2);
+// Data wire is plugged into digital pin 2 on the Arduino
+#define ONE_WIRE_BUS 2
+// Setup a oneWire instance to communicate with any OneWire device
+OneWire oneWire(ONE_WIRE_BUS);	
+// Pass oneWire reference to DallasTemperature library
+DallasTemperature sensors(&oneWire);
 
 TFT_eSPI tft = TFT_eSPI(135, 240); // Invoke custom library
 Button2 btn1(BUTTON_1);
@@ -91,27 +96,18 @@ void showVoltage()
 
 void getTemperatures()
 {
-    byte data[2];
-    ds.reset(); 
-    ds.write(0xCC);
-    ds.write(0x44);
-    delay(750);
-    ds.reset();
-    ds.write(0xCC);
-    ds.write(0xBE);
-    data[0] = ds.read(); 
-    data[1] = ds.read();
-    int Temp = (data[1]<<8)+data[0];
-    Temp = Temp>>4;
-  
-    // schrijf temperatuur naar console.
-    Serial.print(" T = ");
-    Serial.print(Temp);
-    Serial.println("'C");
+    // Send the command to get temperatures
+    sensors.requestTemperatures(); 
+
+    //print the temperature in Celsius
+    Serial.print("Temperature: ");
+    Serial.print(sensors.getTempCByIndex(0));
+    Serial.print((char)176);//shows degrees character
+    Serial.print("C  |  ");
         
     uint16_t v = analogRead(ADC_PIN);
     float battery_voltage = ((float)v / 4095.0) * 2.0 * 3.3 * (vref / 1000.0);
-    String voltage = "Room :" + String(battery_voltage) + "";
+    String voltage = "Room :" + String(battery_voltage) + " C";
     Serial.println(voltage);
     tft.fillScreen(TFT_BLACK);
     tft.setTextDatum(MC_DATUM);
@@ -197,6 +193,7 @@ void setup()
     Serial.begin(115200);
     Serial.println("Start");
 
+    sensors.begin();	// Start up the library
     /*
     ADC_EN is the ADC detection enable port
     If the USB port is used for power supply, it is turned on by default.
