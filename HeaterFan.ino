@@ -23,19 +23,28 @@
 #define BUTTON_2            0
 
 // Data wire is plugged into digital pin 2 on the Arduino
-#define ONE_WIRE_BUS 2
+#define ONE_WIRE_BUS_ROOM 2
+#define ONE_WIRE_BUS_RAD  3
+
 // Setup a oneWire instance to communicate with any OneWire device
-OneWire oneWire(ONE_WIRE_BUS);	
+OneWire oneWireRoom(ONE_WIRE_BUS_ROOM);  
+OneWire oneWireRad( ONE_WIRE_BUS_RAD);  
+
 // Pass oneWire reference to DallasTemperature library
-DallasTemperature sensors(&oneWire);
+DallasTemperature sensRoom(&oneWireRoom);
+DallasTemperature sensRad(&oneWireRad);
 
 TFT_eSPI tft = TFT_eSPI(135, 240); // Invoke custom library
 Button2 btn1(BUTTON_1);
 Button2 btn2(BUTTON_2);
 
-char buff[512];
-int vref = 1100;
-int btnCick = false;
+String strRoom;
+String strRadiator;
+String strPWM;
+int    tempRoom = 0;
+int    tempRadiator = 0;
+int    PWM = 0;
+float    energy = 0;
 
 #define ENABLE_SPI_SDCARD
 
@@ -85,107 +94,45 @@ void espDelay(int ms)
     esp_light_sleep_start();
 }
 
-void showVoltage()
+void showTemperatures()
 {
-    static uint64_t timeStamp = 0;
-    if (millis() - timeStamp > 1000) 
+  int offset=25;
+  
+  // Send the command to get temperatures
+  sensRoom.requestTemperatures(); 
+  sensRad.requestTemperatures(); 
+
+  //print the temperature in Celsius
+  tempRoom     = sensRoom.getTempCByIndex(0);
+  strRoom      = "Ruimte   " + String(tempRoom) + " C";
+  tempRadiator = sensRad.getTempCByIndex(0);
+  strRadiator  = "Radiator " + String(tempRadiator) + " C";
+  strPWM       = "PWM      " + String(PWM/255*100) + "%";
+  tft.drawString(strRoom,     0, offset );
+  offset = offset + 25;
+  tft.drawString(strRadiator, 0, offset );
+  offset = offset + 25;
+  tft.drawString(strPWM,      0, offset );
+  offset = offset + 25;
+  tft.drawString("Energy   " + String(energy),     0, offset );
+}
+
+void calcPWM()
+{
+  
+}
+
+void calcEnergy()
+{
+  static uint64_t timeStamp = 0;
+  if (millis() - timeStamp > 1000) 
+  {
+    if ( tempRadiator > tempRoom )
     {
-        getTemperatures();
+      energy = energy + (tempRadiator - tempRoom) / 1000; 
     }
-}
-
-void getTemperatures()
-{
-    // Send the command to get temperatures
-    sensors.requestTemperatures(); 
-
-    //print the temperature in Celsius
-    Serial.print("Temperature: ");
-    Serial.print(sensors.getTempCByIndex(0));
-    Serial.print((char)176);//shows degrees character
-    Serial.print("C  |  ");
-        
-    uint16_t v = analogRead(ADC_PIN);
-    float battery_voltage = ((float)v / 4095.0) * 2.0 * 3.3 * (vref / 1000.0);
-    String voltage = "Room :" + String(battery_voltage) + " C";
-    Serial.println(voltage);
-    tft.fillScreen(TFT_BLACK);
-    tft.setTextDatum(MC_DATUM);
-    tft.drawString(voltage,  tft.width() / 2, tft.height() / 2 );
-
     timeStamp = millis();
-}
-
-void button_init()
-{
-    btn1.setLongClickHandler([](Button2 & b) {
-        btnCick = false;
-        int r = digitalRead(TFT_BL);
-        tft.fillScreen(TFT_BLACK);
-        tft.setTextColor(TFT_GREEN, TFT_BLACK);
-        tft.setTextDatum(MC_DATUM);
-        tft.drawString("Press again to wake up",  tft.width() / 2, tft.height() / 2 );
-        espDelay(6000);
-        digitalWrite(TFT_BL, !r);
-
-        tft.writecommand(TFT_DISPOFF);
-        tft.writecommand(TFT_SLPIN);
-        //After using light sleep, you need to disable timer wake, because here use external IO port to wake up
-        esp_sleep_disable_wakeup_source(ESP_SLEEP_WAKEUP_TIMER);
-        // esp_sleep_enable_ext1_wakeup(GPIO_SEL_35, ESP_EXT1_WAKEUP_ALL_LOW);
-        esp_sleep_enable_ext0_wakeup(GPIO_NUM_35, 0);
-        delay(200);
-        esp_deep_sleep_start();
-    });
-    btn1.setPressedHandler([](Button2 & b) {
-        Serial.println("Detect Voltage..");
-        btnCick = true;
-    });
-
-    btn2.setPressedHandler([](Button2 & b) {
-        btnCick = false;
-        Serial.println("btn press wifi scan");
-        wifi_scan();
-    });
-}
-
-void button_loop()
-{
-    btn1.loop();
-    btn2.loop();
-}
-
-void wifi_scan()
-{
-    tft.setTextColor(TFT_GREEN, TFT_BLACK);
-    tft.fillScreen(TFT_BLACK);
-    tft.setTextDatum(MC_DATUM);
-    tft.setTextSize(1);
-
-    tft.drawString("Scan Network", tft.width() / 2, tft.height() / 2);
-
-    WiFi.mode(WIFI_STA);
-    WiFi.disconnect();
-    delay(100);
-
-    int16_t n = WiFi.scanNetworks();
-    tft.fillScreen(TFT_BLACK);
-    if (n == 0) {
-        tft.drawString("no networks found", tft.width() / 2, tft.height() / 2);
-    } else {
-        tft.setTextDatum(TL_DATUM);
-        tft.setCursor(0, 0);
-        Serial.printf("Found %d net\n", n);
-        for (int i = 0; i < n; ++i) {
-            sprintf(buff,
-                    "[%d]:%s(%d)",
-                    i + 1,
-                    WiFi.SSID(i).c_str(),
-                    WiFi.RSSI(i));
-            tft.println(buff);
-        }
-    }
-    // WiFi.mode(WIFI_OFF);
+  }
 }
 
 void setup()
@@ -193,75 +140,36 @@ void setup()
     Serial.begin(115200);
     Serial.println("Start");
 
-    sensors.begin();	// Start up the library
-    /*
-    ADC_EN is the ADC detection enable port
-    If the USB port is used for power supply, it is turned on by default.
-    If it is powered by battery, it needs to be set to high level
-    */
+    sensRoom.begin();  // Start up the library
+    sensRad.begin();  // Start up the library
+
     pinMode(ADC_EN, OUTPUT);
     digitalWrite(ADC_EN, HIGH);
 
     tft.init();
     tft.setRotation(1);
-    tft.fillScreen(TFT_BLACK);
-    tft.setTextSize(2);
-    tft.setTextColor(TFT_GREEN);
-    tft.setCursor(0, 0);
-    tft.setTextDatum(MC_DATUM);
-    tft.setTextSize(1);
-
-    /*
-    if (TFT_BL > 0) {                           // TFT_BL has been set in the TFT_eSPI library in the User Setup file TTGO_T_Display.h
-        pinMode(TFT_BL, OUTPUT);                // Set backlight pin to output mode
-        digitalWrite(TFT_BL, TFT_BACKLIGHT_ON); // Turn backlight on. TFT_BACKLIGHT_ON has been set in the TFT_eSPI library in the User Setup file TTGO_T_Display.h
-    }
-    */
 
     tft.setSwapBytes(true);
     tft.pushImage(0, 0,  240, 135, ttgo);
-    espDelay(5000);
-
-
-    tft.setRotation(0);
-    tft.fillScreen(TFT_RED);
-    espDelay(1000);
-    tft.fillScreen(TFT_BLUE);
-    espDelay(1000);
-    tft.fillScreen(TFT_GREEN);
     espDelay(1000);
 
-    button_init();
 
-    esp_adc_cal_characteristics_t adc_chars;
-    esp_adc_cal_value_t val_type = esp_adc_cal_characterize(ADC_UNIT_1, ADC_ATTEN_DB_11, ADC_WIDTH_BIT_12, 1100, &adc_chars);    //Check type of calibration value used to characterize ADC
-    if (val_type == ESP_ADC_CAL_VAL_EFUSE_VREF) {
-        Serial.printf("eFuse Vref:%u mV", adc_chars.vref);
-        vref = adc_chars.vref;
-    } else if (val_type == ESP_ADC_CAL_VAL_EFUSE_TP) {
-        Serial.printf("Two Point --> coeff_a:%umV coeff_b:%umV\n", adc_chars.coeff_a, adc_chars.coeff_b);
-    } else {
-        Serial.println("Default Vref: 1100mV");
-    }
-
-
+    
+    tft.setCursor(0, 0);
+    tft.setTextSize(2);
     tft.fillScreen(TFT_BLACK);
-    tft.setTextDatum(MC_DATUM);
+    
+    tft.setTextColor(TFT_RED, TFT_BLACK);
+    tft.drawString("Radiator booster", 0, 0 );
+    tft.setTextColor(TFT_GREEN, TFT_BLACK);
 
-    setupSDCard();
 
-
-    tft.drawString("LeftButton:", tft.width() / 2, tft.height() / 2 - 16);
-    tft.drawString("[WiFi Scan]", tft.width() / 2, tft.height() / 2 );
-    tft.drawString("RightButton:", tft.width() / 2, tft.height() / 2 + 16);
-    tft.drawString("[Voltage Monitor]", tft.width() / 2, tft.height() / 2 + 32 );
-    tft.drawString("RightButtonLongPress:", tft.width() / 2, tft.height() / 2 + 48);
-    tft.drawString("[Deep Sleep]", tft.width() / 2, tft.height() / 2 + 64 );
-    tft.setTextDatum(TL_DATUM);
+    //setupSDCard();
 }
 
 void loop()
 {
-    showTemperatures();
-    button_loop();
+  showTemperatures();
+  calcPWM();
+  calcEnergy();
 }
