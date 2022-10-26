@@ -21,6 +21,9 @@
 #define BUTTON_1            35
 #define BUTTON_2            0
 
+// DS18B20 op pin 2.
+OneWire ds(2);
+
 TFT_eSPI tft = TFT_eSPI(135, 240); // Invoke custom library
 Button2 btn1(BUTTON_1);
 Button2 btn2(BUTTON_2);
@@ -80,16 +83,41 @@ void espDelay(int ms)
 void showVoltage()
 {
     static uint64_t timeStamp = 0;
-    if (millis() - timeStamp > 1000) {
-        timeStamp = millis();
-        uint16_t v = analogRead(ADC_PIN);
-        float battery_voltage = ((float)v / 4095.0) * 2.0 * 3.3 * (vref / 1000.0);
-        String voltage = "Voltage :" + String(battery_voltage) + "V";
-        Serial.println(voltage);
-        tft.fillScreen(TFT_BLACK);
-        tft.setTextDatum(MC_DATUM);
-        tft.drawString(voltage,  tft.width() / 2, tft.height() / 2 );
+    if (millis() - timeStamp > 1000) 
+    {
+        getTemperatures();
     }
+}
+
+void getTemperatures()
+{
+    byte data[2];
+    ds.reset(); 
+    ds.write(0xCC);
+    ds.write(0x44);
+    delay(750);
+    ds.reset();
+    ds.write(0xCC);
+    ds.write(0xBE);
+    data[0] = ds.read(); 
+    data[1] = ds.read();
+    int Temp = (data[1]<<8)+data[0];
+    Temp = Temp>>4;
+  
+    // schrijf temperatuur naar console.
+    Serial.print(" T = ");
+    Serial.print(Temp);
+    Serial.println("'C");
+        
+    uint16_t v = analogRead(ADC_PIN);
+    float battery_voltage = ((float)v / 4095.0) * 2.0 * 3.3 * (vref / 1000.0);
+    String voltage = "Room :" + String(battery_voltage) + "";
+    Serial.println(voltage);
+    tft.fillScreen(TFT_BLACK);
+    tft.setTextDatum(MC_DATUM);
+    tft.drawString(voltage,  tft.width() / 2, tft.height() / 2 );
+
+    timeStamp = millis();
 }
 
 void button_init()
@@ -237,8 +265,6 @@ void setup()
 
 void loop()
 {
-    if (btnCick) {
-        showVoltage();
-    }
+    showTemperatures();
     button_loop();
 }
