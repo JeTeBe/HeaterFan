@@ -6,7 +6,7 @@
 #include "esp_adc_cal.h"
 #include "bmp.h"
 #include <OneWire.h>
-#include <DallasTemperature.h>
+#include <DallasTemperature.h> 
 
 // TFT Pins has been set in the TFT_eSPI library in the User Setup file TTGO_T_Display.h
 // #define TFT_MOSI            19
