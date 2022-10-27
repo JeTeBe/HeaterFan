@@ -44,7 +44,7 @@ String strPWM;
 int    tempRoom = 0;
 int    tempRadiator = 0;
 int    PWM = 0;
-float    energy = 0;
+float  energy = 0;
 
 #define ENABLE_SPI_SDCARD
 
@@ -104,26 +104,26 @@ void showTemperatures()
 
   //print the temperature in Celsius
   tempRoom     = sensRoom.getTempCByIndex(0);
-  strRoom      = "Ruimte   " + String(tempRoom) + " C";
+  strRoom      = "Ruimte   " + String(tempRoom) + " C   ";
   tempRadiator = sensRad.getTempCByIndex(0);
-  strRadiator  = "Radiator " + String(tempRadiator) + " C";
-  strPWM       = "PWM      " + String(PWM/255*100) + "%";
+  strRadiator  = "Radiator " + String(tempRadiator) + " C   ";
+  strPWM       = "PWM      " + String(PWM) + "   ";
   tft.drawString(strRoom,     0, offset );
   offset = offset + 25;
   tft.drawString(strRadiator, 0, offset );
   offset = offset + 25;
   tft.drawString(strPWM,      0, offset );
   offset = offset + 25;
-  tft.drawString("Energy   " + String(energy),     0, offset );
+  tft.drawString("Energy   " + String(energy) + "    ",     0, offset );
 }
 
-#define PWM_MAX 50
+#define PWM_MAX 255
 
 void calcPWM()
 {
-  if (tempRadiator > (tempRoom + 5))
+  if (tempRadiator >= (tempRoom + 2))
   {
-    PWM = (tempRadiator - tempRoom ) / 20 * 255;
+    PWM = (tempRadiator - tempRoom ) * 10;
     Serial.println(PWM);
     Serial.println(PWM_MAX);
     if (PWM > PWM_MAX)
@@ -131,6 +131,10 @@ void calcPWM()
       PWM = PWM_MAX;
     }
     Serial.println(PWM);
+  }
+  else
+  {
+    PWM = 0;
   }
 }
 
@@ -149,34 +153,47 @@ void calcEnergy()
 
 void setup()
 {
-    Serial.begin(115200);
-    Serial.println("Start");
+  int deviceCount;
+  Serial.begin(115200);
+  Serial.println("Start");
 
-    sensRoom.begin();  // Start up the library
-    sensRad.begin();  // Start up the library
+  sensRoom.begin();  // Start up the library
+  sensRad.begin();  // Start up the library
 
-    pinMode(ADC_EN, OUTPUT);
-    digitalWrite(ADC_EN, HIGH);
+// locate devices on the bus
+  Serial.print("Locating devices...");
+  Serial.print("Room sensors ");
+  deviceCount = sensRoom.getDeviceCount();
+  Serial.print(deviceCount, DEC);
+  Serial.println(" devices.");
+  Serial.print("Radiator sensors ");
+  deviceCount = sensRad.getDeviceCount();
+  Serial.print(deviceCount, DEC);
+  Serial.println(" devices.");
+  Serial.println("");
 
-    tft.init();
-    tft.setRotation(1);
+  pinMode(ADC_EN, OUTPUT);
+  digitalWrite(ADC_EN, HIGH);
 
-    tft.setSwapBytes(true);
-    tft.pushImage(0, 0,  240, 135, ttgo);
-    espDelay(1000);
+  tft.init();
+  tft.setRotation(1);
+
+  tft.setSwapBytes(true);
+  tft.pushImage(0, 0,  240, 135, ttgo);
+  espDelay(1000);
 
 
     
-    tft.setCursor(0, 0);
-    tft.setTextSize(2);
-    tft.fillScreen(TFT_BLACK);
+  tft.setCursor(0, 0);
+  tft.setTextSize(2);
+  tft.fillScreen(TFT_BLACK);
     
-    tft.setTextColor(TFT_RED, TFT_BLACK);
-    tft.drawString("Radiator booster", 0, 0 );
-    tft.setTextColor(TFT_GREEN, TFT_BLACK);
+  tft.setTextColor(TFT_RED, TFT_BLACK);
+  tft.drawString("Radiator booster", 0, 0 );
+  tft.setTextColor(TFT_GREEN, TFT_BLACK);
 
 
-    //setupSDCard();
+  //setupSDCard();
 }
 
 void loop()
