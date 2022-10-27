@@ -23,8 +23,8 @@
 #define BUTTON_2            0
 
 // Data wire is plugged into digital pin 2 on the Arduino
-#define ONE_WIRE_BUS_ROOM 2
-#define ONE_WIRE_BUS_RAD  3
+#define ONE_WIRE_BUS_ROOM 32
+#define ONE_WIRE_BUS_RAD  33
 
 // Setup a oneWire instance to communicate with any OneWire device
 OneWire oneWireRoom(ONE_WIRE_BUS_ROOM);  
@@ -117,9 +117,21 @@ void showTemperatures()
   tft.drawString("Energy   " + String(energy),     0, offset );
 }
 
+#define PWM_MAX 50
+
 void calcPWM()
 {
-  
+  if (tempRadiator > (tempRoom + 5))
+  {
+    PWM = (tempRadiator - tempRoom ) / 20 * 255;
+    Serial.println(PWM);
+    Serial.println(PWM_MAX);
+    if (PWM > PWM_MAX)
+    {
+      PWM = PWM_MAX;
+    }
+    Serial.println(PWM);
+  }
 }
 
 void calcEnergy()
