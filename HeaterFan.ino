@@ -83,8 +83,40 @@ void setupSDCard()
 #define setupSDCard()
 #endif
 
+void button_init()
+{
+    btn1.setLongClickHandler([](Button2 & b) {
+        int r = digitalRead(TFT_BL);
+        tft.fillScreen(TFT_BLACK);
+        tft.setTextColor(TFT_GREEN, TFT_BLACK);
+        tft.setTextDatum(MC_DATUM);
+        tft.drawString("Press again to wake up",  tft.width() / 2, tft.height() / 2 );
+        espDelay(6000);
+        digitalWrite(TFT_BL, !r);
 
-void wifi_scan();
+        tft.writecommand(TFT_DISPOFF);
+        tft.writecommand(TFT_SLPIN);
+        //After using light sleep, you need to disable timer wake, because here use external IO port to wake up
+        esp_sleep_disable_wakeup_source(ESP_SLEEP_WAKEUP_TIMER);
+        // esp_sleep_enable_ext1_wakeup(GPIO_SEL_35, ESP_EXT1_WAKEUP_ALL_LOW);
+        esp_sleep_enable_ext0_wakeup(GPIO_NUM_35, 0);
+        delay(200);
+        esp_deep_sleep_start();
+    });
+    btn1.setPressedHandler([](Button2 & b) {
+        Serial.println("btn1 pressed");
+    });
+
+    btn2.setPressedHandler([](Button2 & b) {
+        Serial.println("btn2 pressed");
+    });
+}
+
+void button_loop()
+{
+    btn1.loop();
+    btn2.loop();
+}
 
 //! Long time delay, it is recommended to use shallow sleep, which can effectively reduce the current consumption
 void espDelay(int ms)
@@ -115,6 +147,8 @@ void showTemperatures()
   tft.drawString(strPWM,      0, offset );
   offset = offset + 25;
   tft.drawString("Energy   " + String(energy) + "    ",     0, offset );
+  offset = offset + 25;
+  tft.setTextDatum(MC_DATUM);
 }
 
 #define PWM_MAX 255
@@ -192,7 +226,8 @@ void setup()
   tft.drawString("Radiator booster", 0, 0 );
   tft.setTextColor(TFT_GREEN, TFT_BLACK);
 
-
+  button_init();
+  
   //setupSDCard();
 }
 
@@ -201,4 +236,5 @@ void loop()
   showTemperatures();
   calcPWM();
   calcEnergy();
+  button_loop();
 }
