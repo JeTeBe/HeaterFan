@@ -1,3 +1,4 @@
+
 #include <TFT_eSPI.h>
 #include <SPI.h>
 #include "WiFi.h"
@@ -7,24 +8,26 @@
 #include "bmp.h"
 #include <OneWire.h>
 #include <DallasTemperature.h> 
+#include <pwmWrite.h>
 
 // TFT Pins has been set in the TFT_eSPI library in the User Setup file TTGO_T_Display.h
-// #define TFT_MOSI            19
-// #define TFT_SCLK            18
-// #define TFT_CS              5
-// #define TFT_DC              16
-// #define TFT_RST             23
-// #define TFT_BL              4   // Display backlight control pin
+// #define TFT_MOSI         19
+// #define TFT_SCLK         18
+// #define TFT_CS           5
+// #define TFT_DC           16
+// #define TFT_RST          23
+// #define TFT_BL           4   // Display backlight control pin
 
 
 #define ADC_EN              14  //ADC_EN is the ADC detection enable port
 #define ADC_PIN             34
 #define BUTTON_1            35
 #define BUTTON_2            0
+#define PWM_PIN             6
 
 // Data wire is plugged into digital pin 2 on the Arduino
-#define ONE_WIRE_BUS_ROOM 32
-#define ONE_WIRE_BUS_RAD  33
+#define ONE_WIRE_BUS_ROOM   32
+#define ONE_WIRE_BUS_RAD    33
 
 // Setup a oneWire instance to communicate with any OneWire device
 OneWire oneWireRoom(ONE_WIRE_BUS_ROOM);  
@@ -41,11 +44,15 @@ Button2 btn2(BUTTON_2);
 String strRoom;
 String strRadiator;
 String strPWM;
-int    tempRoom = 0;
-int    tempRadiator = 0;
-int    PWM = 0;
-float  energy = 0;
+int    tempRoom =      0;
+int    tempRadiator =  0;
+int    PWM =           0;
+float  energy =        0;
 
+
+const float freq = 100;
+const byte resolution = 10;
+Pwm pwm = Pwm();
 #define ENABLE_SPI_SDCARD
 
 //Uncomment will use SDCard, this is just a demonstration,
@@ -83,40 +90,8 @@ void setupSDCard()
 #define setupSDCard()
 #endif
 
-void button_init()
-{
-    btn1.setLongClickHandler([](Button2 & b) {
-        int r = digitalRead(TFT_BL);
-        tft.fillScreen(TFT_BLACK);
-        tft.setTextColor(TFT_GREEN, TFT_BLACK);
-        tft.setTextDatum(MC_DATUM);
-        tft.drawString("Press again to wake up",  tft.width() / 2, tft.height() / 2 );
-        espDelay(6000);
-        digitalWrite(TFT_BL, !r);
 
-        tft.writecommand(TFT_DISPOFF);
-        tft.writecommand(TFT_SLPIN);
-        //After using light sleep, you need to disable timer wake, because here use external IO port to wake up
-        esp_sleep_disable_wakeup_source(ESP_SLEEP_WAKEUP_TIMER);
-        // esp_sleep_enable_ext1_wakeup(GPIO_SEL_35, ESP_EXT1_WAKEUP_ALL_LOW);
-        esp_sleep_enable_ext0_wakeup(GPIO_NUM_35, 0);
-        delay(200);
-        esp_deep_sleep_start();
-    });
-    btn1.setPressedHandler([](Button2 & b) {
-        Serial.println("btn1 pressed");
-    });
-
-    btn2.setPressedHandler([](Button2 & b) {
-        Serial.println("btn2 pressed");
-    });
-}
-
-void button_loop()
-{
-    btn1.loop();
-    btn2.loop();
-}
+void wifi_scan();
 
 //! Long time delay, it is recommended to use shallow sleep, which can effectively reduce the current consumption
 void espDelay(int ms)
@@ -147,8 +122,6 @@ void showTemperatures()
   tft.drawString(strPWM,      0, offset );
   offset = offset + 25;
   tft.drawString("Energy   " + String(energy) + "    ",     0, offset );
-  offset = offset + 25;
-  tft.setTextDatum(MC_DATUM);
 }
 
 #define PWM_MAX 255
@@ -170,6 +143,7 @@ void calcPWM()
   {
     PWM = 0;
   }
+  pwm.write(PWM_PIN, 341, freq, resolution, PWM);
 }
 
 void calcEnergy()
@@ -226,8 +200,10 @@ void setup()
   tft.drawString("Radiator booster", 0, 0 );
   tft.setTextColor(TFT_GREEN, TFT_BLACK);
 
-  button_init();
+  //Declaring LED pin as output
+  pinMode(PWM_PIN, OUTPUT);
   
+  pwm.printPinsStatus();
   //setupSDCard();
 }
 
@@ -236,5 +212,4 @@ void loop()
   showTemperatures();
   calcPWM();
   calcEnergy();
-  button_loop();
 }
