@@ -55,7 +55,7 @@ String strPWM;
 int    tempRoom =      0;
 int    tempRadiator =  0;
 int    PWM =           MIN;
-int    oldPWM =        0;
+int    oldPWM =        -1;
 float  energy =        0;
 int btnClick = false;
 int btnClickUp = false;
@@ -114,7 +114,7 @@ void showTemperatures()
 {
   int offset=25;
   static uint64_t timeStamp = 0;
-  if (millis() - timeStamp > 3000) 
+  if (millis() - timeStamp > 100) 
   {
     // Send the command to get temperatures
     sensRoom.requestTemperatures(); 
@@ -138,21 +138,20 @@ void showTemperatures()
 }
 
 #define PWM_MAX 255
+#define TEMP_DIFF 5
+#define TEMP_MULT 5
 
 void calcPWM()
 {
   if (btnClick == false)
   {
-    if (tempRadiator >= (tempRoom + 2))
+    if (tempRadiator >= (tempRoom + TEMP_DIFF))
     {
-      PWM = (tempRadiator - tempRoom ) * 10;
-      Serial.println(PWM);
-      Serial.println(PWM_MAX);
+      PWM = (tempRadiator - tempRoom -TEMP_DIFF ) * TEMP_MULT;
       if (PWM > PWM_MAX)
       {
         PWM = PWM_MAX;
       }
-      Serial.println(PWM);
     }
     else
     {
@@ -165,13 +164,17 @@ void calcPWM()
   {
     PWM = MIN;
   }
+  if (PWM < MIN )
+  {
+    PWM = MAX;
+  }
   //pwm.write(PWM_PIN, 341, freq, resolution, PWM);
   if ( oldPWM != PWM )
   {
-    ledcWrite(PWMChannel, PWM);
+    //ledcWrite(PWMChannel, PWM);
     //dacWrite(25,150);
     //delay(200);
-    //dacWrite(25,PWM);
+    dacWrite(25, 255 - PWM);
     oldPWM = PWM;
   }
 }
@@ -193,13 +196,14 @@ void setup()
 {
   int deviceCount;
   Serial.begin(9600);
+  delay(1);
   Serial.println("Start");
 
   sensRoom.begin();  // Start up the library
   sensRad.begin();  // Start up the library
 
 // locate devices on the bus
-  Serial.print("Locating devices...");
+  Serial.println("Locating devices...");
   Serial.print("Room sensors ");
   deviceCount = sensRoom.getDeviceCount();
   Serial.print(deviceCount, DEC);
@@ -210,8 +214,8 @@ void setup()
   Serial.println(" devices.");
   Serial.println("");
 
-  pinMode(ADC_EN, OUTPUT);
-  digitalWrite(ADC_EN, HIGH);
+  //pinMode(ADC_EN, OUTPUT);
+  //digitalWrite(ADC_EN, HIGH);
 
   tft.init();
   tft.setRotation(1);
@@ -231,11 +235,11 @@ void setup()
   tft.setTextColor(TFT_GREEN, TFT_BLACK);
 
   // //Declaring LED pin as output
-  pinMode(PWM_PIN, OUTPUT);
+  //pinMode(PWM_PIN, OUTPUT);
   
-  ledcSetup(PWMChannel, PWMFreq, PWMResolution);
+  //ledcSetup(PWMChannel, PWMFreq, PWMResolution);
   /* Attach the LED PWM Channel to the GPIO Pin */
-  ledcAttachPin(PWM_PIN, PWMChannel);
+  //ledcAttachPin(PWM_PIN, PWMChannel);
 
   //setupSDCard();
   button_init();
@@ -262,20 +266,20 @@ void button_loop()
 }
 void loop()
 {
-  showTemperatures();
   calcPWM();
+  showTemperatures();
   //calcEnergy();
   button_loop();
   if (btnClickDown == true)
   {
     Serial.println("Down..");
     btnClickDown = false;
-    PWM = PWM - 1;
+    PWM = PWM - 10;
   }
   if (btnClickUp == true)
   {
     Serial.println("Up..");
     btnClickUp = false;
-    PWM = PWM + 1;
+    PWM = PWM + 10;
   }
 }
