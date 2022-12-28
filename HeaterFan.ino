@@ -8,7 +8,7 @@
 #include "bmp.h"
 #include <OneWire.h>
 #include <DallasTemperature.h> 
-#include <pwmWrite.h>
+//#include <pwmWrite.h>
 
 // TFT Pins has been set in the TFT_eSPI library in the User Setup file TTGO_T_Display.h
 // #define TFT_MOSI         19
@@ -18,12 +18,20 @@
 // #define TFT_RST          23
 // #define TFT_BL           4   // Display backlight control pin
 
+/* Setting PWM Properties */
+const int PWMFreq = 5000; /* 5 KHz */
+const int PWMChannel = 0;
+const int PWMResolution = 8;
+const int MAX_DUTY_CYCLE = (int)(pow(2, PWMResolution) - 1);
+const int MIN = 0;
+const int MAX = 255;
 
 #define ADC_EN              14  //ADC_EN is the ADC detection enable port
 #define ADC_PIN             34
 #define BUTTON_1            35
 #define BUTTON_2            0
-#define PWM_PIN             6
+#define PWM_PIN             25
+
 
 // Data wire is plugged into digital pin 2 on the Arduino
 #define ONE_WIRE_BUS_ROOM   32
@@ -46,13 +54,16 @@ String strRadiator;
 String strPWM;
 int    tempRoom =      0;
 int    tempRadiator =  0;
-int    PWM =           0;
+int    PWM =           MIN;
+int    oldPWM =        0;
 float  energy =        0;
-
+int btnClick = false;
+int btnClickUp = false;
+int btnClickDown = false;
 
 const float freq = 100;
 const byte resolution = 10;
-Pwm pwm = Pwm();
+//Pwm pwm = Pwm();
 #define ENABLE_SPI_SDCARD
 
 //Uncomment will use SDCard, this is just a demonstration,
@@ -91,8 +102,6 @@ void setupSDCard()
 #endif
 
 
-void wifi_scan();
-
 //! Long time delay, it is recommended to use shallow sleep, which can effectively reduce the current consumption
 void espDelay(int ms)
 {
@@ -104,52 +113,73 @@ void espDelay(int ms)
 void showTemperatures()
 {
   int offset=25;
+  static uint64_t timeStamp = 0;
+  if (millis() - timeStamp > 3000) 
+  {
+    // Send the command to get temperatures
+    sensRoom.requestTemperatures(); 
+    sensRad.requestTemperatures(); 
   
-  // Send the command to get temperatures
-  sensRoom.requestTemperatures(); 
-  sensRad.requestTemperatures(); 
-
-  //print the temperature in Celsius
-  tempRoom     = sensRoom.getTempCByIndex(0);
-  strRoom      = "Ruimte   " + String(tempRoom) + " C   ";
-  tempRadiator = sensRad.getTempCByIndex(0);
-  strRadiator  = "Radiator " + String(tempRadiator) + " C   ";
-  strPWM       = "PWM      " + String(PWM) + "   ";
-  tft.drawString(strRoom,     0, offset );
-  offset = offset + 25;
-  tft.drawString(strRadiator, 0, offset );
-  offset = offset + 25;
-  tft.drawString(strPWM,      0, offset );
-  offset = offset + 25;
-  tft.drawString("Energy   " + String(energy) + "    ",     0, offset );
+    //print the temperature in Celsius
+    tempRoom     = sensRoom.getTempCByIndex(0);
+    strRoom      = "Ruimte   " + String(tempRoom) + " C   ";
+    tempRadiator = sensRad.getTempCByIndex(0);
+    strRadiator  = "Radiator " + String(tempRadiator) + " C   ";
+    strPWM       = "PWM      " + String(PWM) + "   ";
+    tft.drawString(strRoom,     0, offset );
+    offset = offset + 25;
+    tft.drawString(strRadiator, 0, offset );
+    offset = offset + 25;
+    tft.drawString(strPWM,      0, offset );
+    offset = offset + 25;
+    tft.drawString("Energy   " + String(energy) + "    ",     0, offset );
+    timeStamp = millis();
+  }
 }
 
 #define PWM_MAX 255
 
 void calcPWM()
 {
-  if (tempRadiator >= (tempRoom + 2))
+  if (btnClick == false)
   {
-    PWM = (tempRadiator - tempRoom ) * 10;
-    Serial.println(PWM);
-    Serial.println(PWM_MAX);
-    if (PWM > PWM_MAX)
+    if (tempRadiator >= (tempRoom + 2))
     {
-      PWM = PWM_MAX;
+      PWM = (tempRadiator - tempRoom ) * 10;
+      Serial.println(PWM);
+      Serial.println(PWM_MAX);
+      if (PWM > PWM_MAX)
+      {
+        PWM = PWM_MAX;
+      }
+      Serial.println(PWM);
     }
-    Serial.println(PWM);
+    else
+    {
+      PWM = 0;
+    }
   }
-  else
+  //PWM = PWM + 1;
+  //delay(15000);
+  if ( PWM > MAX )
   {
-    PWM = 0;
+    PWM = MIN;
   }
-  pwm.write(PWM_PIN, 341, freq, resolution, PWM);
+  //pwm.write(PWM_PIN, 341, freq, resolution, PWM);
+  if ( oldPWM != PWM )
+  {
+    ledcWrite(PWMChannel, PWM);
+    //dacWrite(25,150);
+    //delay(200);
+    //dacWrite(25,PWM);
+    oldPWM = PWM;
+  }
 }
 
 void calcEnergy()
 {
   static uint64_t timeStamp = 0;
-  if (millis() - timeStamp > 1000) 
+  if (millis() - timeStamp > 3000) 
   {
     if ( tempRadiator > tempRoom )
     {
@@ -162,7 +192,7 @@ void calcEnergy()
 void setup()
 {
   int deviceCount;
-  Serial.begin(115200);
+  Serial.begin(9600);
   Serial.println("Start");
 
   sensRoom.begin();  // Start up the library
@@ -200,16 +230,52 @@ void setup()
   tft.drawString("Radiator booster", 0, 0 );
   tft.setTextColor(TFT_GREEN, TFT_BLACK);
 
-  //Declaring LED pin as output
+  // //Declaring LED pin as output
   pinMode(PWM_PIN, OUTPUT);
   
-  pwm.printPinsStatus();
+  ledcSetup(PWMChannel, PWMFreq, PWMResolution);
+  /* Attach the LED PWM Channel to the GPIO Pin */
+  ledcAttachPin(PWM_PIN, PWMChannel);
+
   //setupSDCard();
+  button_init();
 }
 
+void button_init()
+{
+  btn1.setPressedHandler([](Button2 & b) 
+  {
+    btnClickDown = true;
+    btnClick = true;
+  });
+
+  btn2.setPressedHandler([](Button2 & b) 
+  {
+    btnClickUp = true;
+    btnClick = true;
+  });
+}
+void button_loop()
+{
+    btn1.loop();
+    btn2.loop();
+}
 void loop()
 {
   showTemperatures();
   calcPWM();
-  calcEnergy();
+  //calcEnergy();
+  button_loop();
+  if (btnClickDown == true)
+  {
+    Serial.println("Down..");
+    btnClickDown = false;
+    PWM = PWM - 1;
+  }
+  if (btnClickUp == true)
+  {
+    Serial.println("Up..");
+    btnClickUp = false;
+    PWM = PWM + 1;
+  }
 }
