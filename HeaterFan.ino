@@ -24,7 +24,7 @@ const int PWMChannel = 0;
 const int PWMResolution = 8;
 const int MAX_DUTY_CYCLE = (int)(pow(2, PWMResolution) - 1);
 const int MIN = 0;
-const int MAX = 255;
+const int MAX = 100;  // Was 255 but than the fans make to much noise
 
 #define ADC_EN              14  //ADC_EN is the ADC detection enable port
 #define ADC_PIN             34
